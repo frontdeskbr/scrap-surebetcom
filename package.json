@@ -1,13 +1,12 @@
 {
-  "name": "surebet-login",
+  "name": "scrap-surebetcom",
   "version": "1.0.0",
   "type": "module",
-  "scripts": {
-    "start": "node index.js",
-    "postinstall": "npx playwright install"
-  },
+  "main": "index.js",
   "dependencies": {
-    "dotenv": "^16.4.5",
-    "playwright": "^1.44.0"
+    "node-fetch": "^3.4.0"
+  },
+  "scripts": {
+    "start": "node index.js"
   }
 }
