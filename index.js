@@ -1,98 +1,114 @@
 import { chromium } from 'playwright';
-import dotenv from 'dotenv';
 import fetch from 'node-fetch';
-
+import dotenv from 'dotenv';
 dotenv.config();
 
-const SUPABASE_URL = process.env.SUPABASE_URL;
-const SUPABASE_KEY = process.env.SUPABASE_KEY;
+const URL = 'https://pt.surebet.com/users/sign_in';
+const EMAIL = 'contato.frontdesk@gmail.com';
+const PASSWORD = 'Acesso@01';
+const SUPABASE_URL = 'https://ssrdcsrmifoexueivfls.supabase.co/rest/v1/arbs';
+const SUPABASE_API_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...';
 
-async function start() {
+(async () => {
   const browser = await chromium.launch({ headless: true });
-  const page = await browser.newPage();
+  const context = await browser.newContext();
+  const page = await context.newPage();
 
   // Login
-  await page.goto('https://pt.surebet.com/users/sign_in');
-  await page.fill('#user_email', process.env.SUREBET_EMAIL);
-  await page.fill('#user_password', process.env.SUREBET_PASSWORD);
+  await page.goto(URL);
+  await page.fill('#user_email', EMAIL);
+  await page.fill('#user_password', PASSWORD);
   await page.click('#sign-in-form-submit-button');
-  await page.waitForNavigation();
+  await page.waitForURL('https://pt.surebet.com/surebets');
 
-  // Acessa a lista de surebets
-  await page.goto('https://pt.surebet.com/surebets');
-  await page.waitForSelector('.surebet');
+  // Aguardar tabela carregar
+  await page.waitForSelector('tr', { timeout: 20000 });
 
-  // Extrai os dados
   const resultados = await page.evaluate(() => {
-    const linhas = [];
-    document.querySelectorAll('.surebet').forEach(b => {
-      try {
-        const lucro = b.querySelector('.-profit')?.innerText.trim() || "";
-        const tempo = b.querySelector('.text-muted.small')?.innerText.trim() || "";
+    const linhas = Array.from(document.querySelectorAll('tr'));
+    const dados = [];
 
-        const casas = b.querySelectorAll('.-bookmaker');
+    for (const el of linhas) {
+      try {
+        const lucro = el.querySelector('.-profit')?.innerText.trim() || "";
+        const tempo = el.querySelector('.text-muted.small')?.innerText.trim() || "";
+
+        const casas = el.querySelectorAll('.-bookmaker a');
         const casa1 = casas[0]?.innerText.trim() || "";
         const casa2 = casas[1]?.innerText.trim() || "";
 
-        const esportes = b.querySelectorAll('.-sport');
+        const esportes = el.querySelectorAll('.-bookmaker .minor');
         const esporte1 = esportes[0]?.innerText.trim() || "";
         const esporte2 = esportes[1]?.innerText.trim() || "";
 
-        const eventos = b.querySelectorAll('.-name');
-        const evento1 = eventos[0]?.innerText.trim() || "";
-        const evento2 = eventos[1]?.innerText.trim() || "";
+        const datahora = el.querySelector('abbr')?.getAttribute('title')?.trim().split(', ') || ["", ""];
+        const data = datahora[0] || "";
+        const hora = datahora[1] || "";
 
-        const descricoes = b.querySelectorAll('.event-details');
-        const descEv1 = descricoes[0]?.innerText.trim() || "";
-        const descEv2 = descricoes[1]?.innerText.trim() || "";
+        const eventos = el.querySelectorAll('td:nth-child(3)');
+        const evento1 = eventos[0]?.querySelectorAll('div')[0]?.innerText.trim() || "";
+        const evento2 = eventos[0]?.querySelectorAll('div')[2]?.innerText.trim() || "";
 
-        const mercados = b.querySelectorAll('.-bet-type');
+        const descricoes = el.querySelectorAll('td:nth-child(3) .minor');
+        const descev1 = descricoes[0]?.innerText.trim() || "";
+        const descev2 = descricoes[1]?.innerText.trim() || "";
+
+        const mercados = el.querySelectorAll('td:nth-child(5) .minor');
         const mercado1 = mercados[0]?.innerText.trim() || "";
         const mercado2 = mercados[1]?.innerText.trim() || "";
 
-        const odds = b.querySelectorAll('.-odd');
+        const odds = el.querySelectorAll('.value_link');
         const odd1 = odds[0]?.innerText.trim() || "";
         const odd2 = odds[1]?.innerText.trim() || "";
 
-        const links = b.querySelectorAll('.-btn-bet');
-        const link1 = links[0]?.href || "";
-        const link2 = links[1]?.href || "";
+        const linkcasa1 = odds[0]?.getAttribute('href') || "";
+        const linkcasa2 = odds[1]?.getAttribute('href') || "";
 
-        linhas.push({
-          lucro, tempo,
-          casa1, esporte1,
-          casa2, esporte2,
-          evento1, descEv1,
-          evento2, descEv2,
-          mercado1, odd1,
-          mercado2, odd2,
-          link1, link2
-        });
-      } catch (err) {
-        console.warn("Erro ao processar linha:", err);
+        if (lucro && odd1 && odd2) {
+          dados.push({
+            lucro,
+            tempo,
+            casa1,
+            esporte1,
+            casa2,
+            esporte2,
+            data,
+            hora,
+            evento1,
+            descev1,
+            evento2,
+            descev2,
+            mercado1,
+            odd1,
+            mercado2,
+            odd2,
+            linkcasa1,
+            linkcasa2
+          });
+        }
+      } catch (e) {
+        console.warn("Erro ao processar linha:", e);
       }
-    });
-    return linhas;
+    }
+
+    return dados;
   });
 
-  console.log(`✅ Total extraído: ${resultados.length}`);
-
-  // Envia pro Supabase
-  for (const dado of resultados) {
-    await fetch(`${SUPABASE_URL}/rest/v1/Surebet`, {
-      method: "POST",
+  // Enviar para Supabase
+  for (const item of resultados) {
+    await fetch(SUPABASE_URL, {
+      method: 'POST',
       headers: {
-        apikey: SUPABASE_KEY,
-        Authorization: `Bearer ${SUPABASE_KEY}`,
-        "Content-Type": "application/json",
-        Prefer: "resolution=merge-duplicates"
+        'apikey': SUPABASE_API_KEY,
+        'Authorization': `Bearer ${SUPABASE_API_KEY}`,
+        'Content-Type': 'application/json',
+        'Prefer': 'resolution=merge-duplicates'
       },
-      body: JSON.stringify(dado)
-    });
+      body: JSON.stringify(item)
+    }).then(res => res.text())
+      .then(console.log)
+      .catch(console.error);
   }
 
-  console.log("✅ Enviado ao Supabase com sucesso.");
   await browser.close();
-}
-
-start();
+})();
