@@ -1,0 +1,12 @@
+{
+  "name": "surebet-scraper",
+  "version": "1.0.0",
+  "description": "Scraper de oportunidades de apostas do pt.surebet.com",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "dependencies": {
+    "playwright": "^1.42.1"
+  }
+}
