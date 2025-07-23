@@ -6,12 +6,12 @@ const SENHA = 'Guaruja@01';
 const URL_LOGIN = 'https://pt.surebet.com/users/sign_in';
 const URL_ARBS = 'https://pt.surebet.com/surebets';
 
-// Supabase
+// 🟢 Supabase
 const SUPABASE_URL = 'https://ssrdcsrmifoexueivfls.supabase.co';
 const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNzcmRjc3JtaWZvZXh1ZWl2ZmxzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTI4MTYzNTgsImV4cCI6MjA2ODM5MjM1OH0.m5Z0FKHB2Pow4zby3dvM-dM4Io9P9tTN4LQVfkCOCsw';
 
-// Google Sheets Webhook
-const SHEET_WEBHOOK = 'https://script.google.com/macros/s/AKfycbzaTeSftC1pLG7vN2SsnrZvEcjmzf6-8etd5fvDS_H9dFC5kdVS66kj1f6O41BEdkZxGg/exec';
+// 🟢 Google Sheets Webhook
+const SHEET_WEBHOOK = 'https://script.google.com/macros/s/AKfycbxbiC-dVwkSDEKkODvHhjng_yKdarlLj5OUtpQ0EH48srq9wV5p8cEzshnRRZQuLsA2/exec';
 
 const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
 
@@ -26,14 +26,17 @@ const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
   await page.fill('input[name="user[email]"]', EMAIL);
   await page.fill('input[name="user[password]"]', SENHA);
   await page.click('input[type="submit"]');
-  await page.waitForNavigation({ waitUntil: 'domcontentloaded' });
 
+  await page.waitForNavigation({ waitUntil: 'domcontentloaded' });
   console.log("✅ Login feito.");
+
+  console.log("🌐 Indo para página de arbitragens...");
   await page.goto(URL_ARBS, { waitUntil: 'domcontentloaded' });
   await delay(3000);
 
   const oportunidades = await page.evaluate(() => {
     const oportunidades = [];
+
     document.querySelectorAll('.surebet_record').forEach((el) => {
       try {
         const lucro = el.querySelector('.profit')?.innerText.trim() || "";
@@ -72,37 +75,54 @@ const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
 
         oportunidades.push({
           lucro, tempo, casa1, esporte1, casa2, esporte2,
-          data, hora, evento1, descEv1, evento2, descEv2,
-          mercado1, odd1, mercado2, odd2, linkCasa1, linkCasa2
+          data, hora, evento1, descev1: descEv1, evento2, descev2: descEv2,
+          mercado1, odd1, mercado2, odd2, linkcasa1: linkCasa1, linkcasa2: linkCasa2
         });
       } catch (e) {
         console.warn("❌ Erro ao processar:", e);
       }
     });
+
     return oportunidades;
   });
 
   console.log(`✅ Extraído: ${oportunidades.length} linhas`);
 
   for (const o of oportunidades) {
-    // Supabase
-    await fetch(`${SUPABASE_URL}/rest/v1/Arbs`, {
-      method: "POST",
-      headers: {
-        "apikey": SUPABASE_KEY,
-        "Authorization": `Bearer ${SUPABASE_KEY}`,
-        "Content-Type": "application/json",
-        "Prefer": "resolution=merge-duplicates"
-      },
-      body: JSON.stringify({ ...o })
-    }).then(() => console.log("📤 Enviado ao Supabase:", o.evento1))
-      .catch(err => console.error("❌ Supabase:", err));
+    // Enviar ao Supabase
+    try {
+      const resSupabase = await fetch(`${SUPABASE_URL}/rest/v1/Arbs`, {
+        method: "POST",
+        headers: {
+          "apikey": SUPABASE_KEY,
+          "Authorization": `Bearer ${SUPABASE_KEY}`,
+          "Content-Type": "application/json",
+          "Prefer": "resolution=merge-duplicates"
+        },
+        body: JSON.stringify(o)
+      });
 
-    // Google Sheets
-    const params = new URLSearchParams(o).toString();
-    await fetch(`${SHEET_WEBHOOK}?${params}`)
-      .then(() => console.log("📤 Enviado ao Sheets:", o.evento1))
-      .catch(err => console.error("❌ Sheets:", err));
+      if (resSupabase.ok) {
+        console.log(`✅ Enviado ao Supabase: ${o.evento1} – ${o.evento2}`);
+      } else {
+        console.error("❌ Supabase erro:", await resSupabase.text());
+      }
+    } catch (e) {
+      console.error("❌ Falha Supabase:", e);
+    }
+
+    // Enviar ao Google Sheets
+    try {
+      const url = `${SHEET_WEBHOOK}?` + new URLSearchParams(o).toString();
+      const resSheet = await fetch(url);
+      if (resSheet.ok) {
+        console.log(`✅ Enviado ao Sheets: ${o.evento1} – ${o.evento2}`);
+      } else {
+        console.error("❌ Sheets erro:", await resSheet.text());
+      }
+    } catch (e) {
+      console.error("❌ Falha Sheets:", e);
+    }
   }
 
   await browser.close();
