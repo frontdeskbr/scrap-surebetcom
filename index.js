@@ -1,3 +1,5 @@
+import fetch from 'node-fetch';
+
 import { chromium } from 'playwright';
 import fetch from 'node-fetch';
 import dotenv from 'dotenv';
