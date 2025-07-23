@@ -6,12 +6,10 @@ const SENHA = 'Guaruja@01';
 const URL_LOGIN = 'https://pt.surebet.com/users/sign_in';
 const URL_ARBS = 'https://pt.surebet.com/surebets';
 
-// 🟢 Supabase
 const SUPABASE_URL = 'https://ssrdcsrmifoexueivfls.supabase.co';
 const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNzcmRjc3JtaWZvZXh1ZWl2ZmxzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTI4MTYzNTgsImV4cCI6MjA2ODM5MjM1OH0.m5Z0FKHB2Pow4zby3dvM-dM4Io9P9tTN4LQVfkCOCsw';
 
-// 🟢 Google Sheets Webhook
-const SHEET_WEBHOOK = 'https://script.google.com/macros/s/AKfycbxbiC-dVwkSDEKkODvHhjng_yKdarlLj5OUtpQ0EH48srq9wV5p8cEzshnRRZQuLsA2/exec';
+const SHEETS_URL = 'https://script.google.com/macros/s/AKfycbxbiC-dVwkSDEKkODvHhjng_yKdarlLj5OUtpQ0EH48srq9wV5p8cEzshnRRZQuLsA2/exec';
 
 const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
 
@@ -20,13 +18,12 @@ const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
   const browser = await chromium.launch({ headless: true });
   const page = await browser.newPage();
 
-  console.log("🔑 Acessando login...");
+  console.log("🔐 Acessando login...");
   await page.goto(URL_LOGIN, { waitUntil: 'domcontentloaded' });
 
   await page.fill('input[name="user[email]"]', EMAIL);
   await page.fill('input[name="user[password]"]', SENHA);
   await page.click('input[type="submit"]');
-
   await page.waitForNavigation({ waitUntil: 'domcontentloaded' });
   console.log("✅ Login feito.");
 
@@ -59,8 +56,8 @@ const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
         const evento2 = eventos[1]?.innerText.trim() || "";
 
         const descricoes = el.querySelectorAll('.event .minor');
-        const descEv1 = descricoes[0]?.innerText.trim() || "";
-        const descEv2 = descricoes[1]?.innerText.trim() || "";
+        const descev1 = descricoes[0]?.innerText.trim() || "";
+        const descev2 = descricoes[1]?.innerText.trim() || "";
 
         const mercados = el.querySelectorAll('.coeff abbr');
         const mercado1 = mercados[0]?.innerText.trim() || "";
@@ -70,13 +67,13 @@ const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
         const odd1 = odds[0]?.innerText.trim() || "";
         const odd2 = odds[1]?.innerText.trim() || "";
 
-        const linkCasa1 = "https://pt.surebet.com" + (odds[0]?.getAttribute("href") || "");
-        const linkCasa2 = "https://pt.surebet.com" + (odds[1]?.getAttribute("href") || "");
+        const linkcasa1 = "https://pt.surebet.com" + (odds[0]?.getAttribute("href") || "");
+        const linkcasa2 = "https://pt.surebet.com" + (odds[1]?.getAttribute("href") || "");
 
         oportunidades.push({
           lucro, tempo, casa1, esporte1, casa2, esporte2,
-          data, hora, evento1, descev1: descEv1, evento2, descev2: descEv2,
-          mercado1, odd1, mercado2, odd2, linkcasa1: linkCasa1, linkcasa2: linkCasa2
+          data, hora, evento1, descev1, evento2, descev2,
+          mercado1, odd1, mercado2, odd2, linkcasa1, linkcasa2
         });
       } catch (e) {
         console.warn("❌ Erro ao processar:", e);
@@ -89,40 +86,44 @@ const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
   console.log(`✅ Extraído: ${oportunidades.length} linhas`);
 
   for (const o of oportunidades) {
-    // Enviar ao Supabase
+    // SUPABASE
     try {
       const resSupabase = await fetch(`${SUPABASE_URL}/rest/v1/Arbs`, {
         method: "POST",
         headers: {
-          "apikey": SUPABASE_KEY,
-          "Authorization": `Bearer ${SUPABASE_KEY}`,
-          "Content-Type": "application/json",
-          "Prefer": "resolution=merge-duplicates"
+          apikey: SUPABASE_KEY,
+          Authorization: `Bearer ${SUPABASE_KEY}`,
+          "Content-Type": "application/json"
         },
         body: JSON.stringify(o)
       });
 
       if (resSupabase.ok) {
-        console.log(`✅ Enviado ao Supabase: ${o.evento1} – ${o.evento2}`);
+        console.log(`📦 Enviado ao Supabase: ${o.evento1} – ${o.evento2}`);
       } else {
-        console.error("❌ Supabase erro:", await resSupabase.text());
+        const erro = await resSupabase.text();
+        console.log(`❌ Supabase erro:`, erro);
       }
-    } catch (e) {
-      console.error("❌ Falha Supabase:", e);
+    } catch (err) {
+      console.log(`❌ Supabase exceção:`, err.message);
     }
 
-    // Enviar ao Google Sheets
+    // GOOGLE SHEETS
     try {
-      const url = `${SHEET_WEBHOOK}?` + new URLSearchParams(o).toString();
-      const resSheet = await fetch(url);
-      if (resSheet.ok) {
-        console.log(`✅ Enviado ao Sheets: ${o.evento1} – ${o.evento2}`);
+      const params = new URLSearchParams(o).toString();
+      const resSheets = await fetch(`${SHEETS_URL}?${params}`);
+
+      if (resSheets.ok) {
+        console.log(`📄 Enviado ao Sheets: ${o.evento1} – ${o.evento2}`);
       } else {
-        console.error("❌ Sheets erro:", await resSheet.text());
+        const erro = await resSheets.text();
+        console.log("❌ Sheets erro:", erro);
       }
-    } catch (e) {
-      console.error("❌ Falha Sheets:", e);
+    } catch (err) {
+      console.log("❌ Sheets exceção:", err.message);
     }
+
+    await delay(300); // evita sobrecarga nas requisições
   }
 
   await browser.close();
