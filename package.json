@@ -1,5 +1,9 @@
 {
   "type": "module",
+  "scripts": {
+    "postinstall": "npx playwright install --with-deps",
+    "start": "node index.js"
+  },
   "dependencies": {
     "playwright": "^1.44.0",
     "node-fetch": "^3.3.2"
