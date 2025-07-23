@@ -1,40 +1,47 @@
-import fetch from 'node-fetch';
 import { chromium } from 'playwright';
-import dotenv from 'dotenv';
-dotenv.config();
+import { createClient } from '@supabase/supabase-js';
 
-const URL = 'https://pt.surebet.com/users/sign_in';
-const EMAIL = 'contato.frontdesk@gmail.com';
-const PASSWORD = 'Acesso@01';
-const SUPABASE_URL = 'https://ssrdcsr...supabase.co/rest/v1/arbs';
-const SUPABASE_API_KEY = 'ey...'; // Sua chave completa
+// Supabase config
+const supabaseUrl = 'https://ssrdcsrmifoexueivfls.supabase.co';
+const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNzcmRjc3JtaWZvZXh1ZWl2ZmxzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTI4MTYzNTgsImV4cCI6MjA2ODM5MjM1OH0.m5Z0FKHB2Pow4zby3dvM-dM4Io9P9tTN4LQVfkCOCsw';
+const supabase = createClient(supabaseUrl, supabaseKey);
 
 (async () => {
+  console.log('▶️ Iniciando navegador...');
   const browser = await chromium.launch({ headless: true });
-  const context = await browser.newContext();
-  const page = await context.newPage();
+  const page = await browser.newPage();
 
-  await page.goto(URL);
-  await page.fill('#user_email', EMAIL);
-  await page.fill('#user_password', PASSWORD);
-  await page.click('#sign-in-form-submit-button');
-  await page.waitForNavigation();
+  try {
+    console.log('▶️ Acessando login...');
+    await page.goto('https://www.betburger.com/br/users/sign_in', { waitUntil: 'load' });
 
-  // Coleta link da primeira oportunidade visível
-  const link = await page.getAttribute('.btn.btn-light.btn-sm.text-nowrap', 'href');
-  const finalLink = link.startsWith('http') ? link : `https://pt.surebet.com${link}`;
+    await page.fill('#betburger_user_email', 'contato.frontdesk@gmail.com');
+    await page.fill('#betburger_user_password', 'Guaruja@01');
+    await page.waitForTimeout(3000); // aguarda o recaptcha automático preencher
+    await page.click('button[type="submit"]');
 
-  await fetch(SUPABASE_URL, {
-    method: 'POST',
-    headers: {
-      apikey: SUPABASE_API_KEY,
-      Authorization: `Bearer ${SUPABASE_API_KEY}`,
-      'Content-Type': 'application/json',
-      Prefer: 'resolution=merge-duplicates'
-    },
-    body: JSON.stringify([{ link: finalLink }])
-  });
+    await page.waitForNavigation({ waitUntil: 'load', timeout: 60000 });
 
-  console.log('✅ Enviado:', finalLink);
-  await browser.close();
+    console.log('✅ Logado. Indo para a página de arbitragens...');
+    await page.goto('https://www.betburger.com/arbs', { waitUntil: 'load' });
+    await page.waitForTimeout(5000);
+
+    console.log('🔍 Extraindo arbitragens...');
+    const arbs = await page.$$eval('.arbs-table-row', rows =>
+      rows.map(row => row.innerText.trim())
+    );
+
+    if (arbs.length === 0) {
+      console.log('⚠️ Nenhuma arbitragem encontrada.');
+    } else {
+      const payload = arbs.map(text => ({ raw_text: text }));
+      await supabase.from('Arbs').insert(payload, { returning: 'minimal' });
+      console.log(`✅ ${payload.length} arbitragens enviadas ao Supabase.`);
+    }
+
+  } catch (err) {
+    console.error('❌ Erro geral:', err);
+  } finally {
+    await browser.close();
+  }
 })();
