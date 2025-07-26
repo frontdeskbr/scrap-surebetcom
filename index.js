@@ -29,54 +29,45 @@ const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
 
   console.log('🌐 Indo para página de arbitragens...');
   await page.goto(URL_ARBS);
-  await delay(2000);
+  await delay(3000);
 
-  const precisaDesmarcar = await page.$eval('#selector_outcomes_3', el => el.checked);
-  if (precisaDesmarcar) {
-    console.log('⚙️ Desmarcando seleções de 3 resultados...');
-    await page.click('#selector_outcomes_3');
-    await page.click('input#ft.btn.btn-primary.mb-2');
-    await delay(3000);
-  }
+  console.log('☑️ Desmarcando seleções de 3 resultados...');
+  const checkbox3 = await page.$('#selector_outcomes_3');
+  const isChecked3 = checkbox3 && await checkbox3.isChecked();
+  if (isChecked3) await checkbox3.click();
+
+  const checkbox2 = await page.$('#selector_outcomes_2');
+  const isChecked2 = checkbox2 && await checkbox2.isChecked();
+  if (!isChecked2) await checkbox2.click();
+
+  await delay(500);
+  await page.click('input#ft');
+  await delay(5000);
 
   const oportunidades = await page.evaluate(() => {
     const dados = [];
-    document.querySelectorAll('tbody.surebet_record').forEach((el) => {
+    document.querySelectorAll('.surebet_record[group-size="2"]').forEach((el) => {
       try {
-        const groupSize = el.getAttribute('data-group-size');
-        if (groupSize !== '2') return;
-
         const lucro = el.querySelector('.profit')?.innerText.trim() || '';
         const tempo = el.querySelector('.age')?.innerText.trim() || '';
-
         const casas = el.querySelectorAll('.booker');
-        const casa1 = casas[0]?.innerText.trim().split('\n')[0] || '';
-        const casa2 = casas[1]?.innerText.trim().split('\n')[0] || '';
-
-        const esportes = el.querySelectorAll('.booker .minor');
-        const esporte1 = esportes[0]?.innerText.trim() || '';
-        const esporte2 = esportes[1]?.innerText.trim() || '';
-
-        const dataHora = el.querySelectorAll('.time abbr')[0]?.innerText.trim().split('\n') || [];
-        const data = dataHora[0]?.trim() || '';
-        const hora = dataHora[1]?.trim() || '';
-
+        const casa1 = casas[0]?.innerText.trim() || '';
+        const casa2 = casas[1]?.innerText.trim() || '';
+        const esporte1 = esporte2 = 'Futebol';
+        const abbr = el.querySelector('abbr');
+        const [data, hora] = abbr?.innerText.trim().split('\n') || ['', ''];
         const eventos = el.querySelectorAll('.event a');
         const evento1 = eventos[0]?.innerText.trim() || '';
         const evento2 = eventos[1]?.innerText.trim() || '';
-
         const descricoes = el.querySelectorAll('.event .minor');
         const descEv1 = descricoes[0]?.innerText.trim() || '';
         const descEv2 = descricoes[1]?.innerText.trim() || '';
-
         const mercados = el.querySelectorAll('.coeff abbr');
         const mercado1 = mercados[0]?.innerText.trim() || '';
         const mercado2 = mercados[1]?.innerText.trim() || '';
-
         const odds = el.querySelectorAll('.value_link');
         const odd1 = odds[0]?.innerText.trim() || '';
         const odd2 = odds[1]?.innerText.trim() || '';
-
         const link1 = 'https://pt.surebet.com' + (odds[0]?.getAttribute('href') || '');
         const link2 = 'https://pt.surebet.com' + (odds[1]?.getAttribute('href') || '');
 
@@ -113,25 +104,11 @@ const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
     try {
       await supabase.from('arbs').insert({
         id: `${evento1}-${evento2}`.substring(0, 60),
-        lucro,
-        tempo,
-        casa1,
-        esporte1,
-        casa2,
-        esporte2,
-        data,
-        hora,
-        evento1,
-        descev1: descEv1,
-        evento2,
-        descev2: descEv2,
-        mercado1,
-        odd1,
-        mercado2,
-        odd2,
-        linkcasa1: link1,
-        linkcasa2: link2
-      });
+        lucro, tempo, casa1, esporte1, casa2, esporte2,
+        data, hora, evento1, descEv1, evento2, descEv2,
+        mercado1, odd1, mercado2, odd2,
+        linkcasa1: link1, linkcasa2: link2
+      }, { returning: 'minimal' });
       console.log(`📦 Enviado ao Supabase: ${evento1} – ${evento2}`);
     } catch (e) {
       console.error('❌ Supabase erro:', e);
