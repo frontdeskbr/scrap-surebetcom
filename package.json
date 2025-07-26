@@ -9,6 +9,7 @@
   "dependencies": {
     "@supabase/supabase-js": "^2.42.5",
     "playwright": "^1.44.0",
-    "node-fetch": "^3.3.2"
+    "node-fetch": "^3.3.2",
+    "fs-extra": "^11.2.0"
   }
 }
