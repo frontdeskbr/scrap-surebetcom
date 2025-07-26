@@ -1,12 +1,9 @@
 import { chromium } from 'playwright';
 import fetch from 'node-fetch';
 import { createClient } from '@supabase/supabase-js';
-import fs from 'fs/promises';
 
 const EMAIL = 'desenvolvimento.frontdesk@gmail.com';
 const SENHA = 'Guaruja@01';
-const COOKIE_PATH = './cookies.json';
-
 const URL_LOGIN = 'https://pt.surebet.com/users/sign_in';
 const URL_ARBS = 'https://pt.surebet.com/surebets';
 const SHEETS_URL = 'https://script.google.com/macros/s/AKfycbzaTeSftC1pLG7vN2SsnrZvEcjmzf6-8etd5fvDS_H9dFC5kdVS66kj1f6O41BEdkZxGg/exec';
@@ -16,41 +13,22 @@ const supabase = createClient(
   'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNzcmRjc3JtaWZvZXh1ZWl2ZmxzIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc1MjgxNjM1OCwiZXhwIjoyMDY4MzkyMzU4fQ.8lK6UKsNPh3Ikll53YBbdpmGv0aWQQKuMYk9zsIiK54'
 );
 
-const delay = ms => new Promise(res => setTimeout(res, ms));
+const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
 
 (async () => {
   console.log('▶️ Iniciando navegador...');
   const browser = await chromium.launch({ headless: true });
-  const context = await browser.newContext();
+  const page = await browser.newPage();
 
-  // 👉 Tenta usar cookies salvos
-  try {
-    const cookies = JSON.parse(await fs.readFile(COOKIE_PATH, 'utf8'));
-    await context.addCookies(cookies);
-    console.log('🍪 Cookies carregados.');
-  } catch {
-    console.log('⚠️ Nenhum cookie salvo.');
-  }
+  console.log('🔐 Acessando login...');
+  await page.goto(URL_LOGIN);
+  await page.fill('input[name="user[email]"]', EMAIL);
+  await page.fill('input[name="user[password]"]', SENHA);
+  await page.click('input[type="submit"]');
+  await page.waitForNavigation();
 
-  const page = await context.newPage();
-
-  console.log('🔐 Acessando página de arbitragens...');
-  await page.goto(URL_ARBS, { waitUntil: 'domcontentloaded' });
-
-  // Se redirecionar pro login, faz login e salva cookies
-  if (page.url().includes('/users/sign_in')) {
-    console.log('🔐 Fazendo login...');
-    await page.goto(URL_LOGIN);
-    await page.fill('input[name="user[email]"]', EMAIL);
-    await page.fill('input[name="user[password]"]', SENHA);
-    await page.click('input[type="submit"]');
-    await page.waitForNavigation({ waitUntil: 'domcontentloaded' });
-    const newCookies = await context.cookies();
-    await fs.writeFile(COOKIE_PATH, JSON.stringify(newCookies, null, 2));
-    console.log('✅ Login concluído e cookies salvos.');
-    await page.goto(URL_ARBS, { waitUntil: 'domcontentloaded' });
-  }
-
+  console.log('🌐 Indo para página de arbitragens...');
+  await page.goto(URL_ARBS);
   await delay(3000);
 
   const oportunidades = await page.evaluate(() => {
@@ -100,6 +78,7 @@ const delay = ms => new Promise(res => setTimeout(res, ms));
   for (const linha of oportunidades) {
     const [lucro, tempo, casa1, esporte1, casa2, esporte2, data, hora, evento1, descEv1, evento2, descEv2, mercado1, odd1, mercado2, odd2, link1, link2] = linha;
 
+    // Enviar ao Sheets
     const dadosSheet = new URLSearchParams({
       lucro, tempo, casa1, esporte1, casa2, esporte2,
       data, hora, evento1, descev1: descEv1, evento2, descev2: descEv2,
@@ -108,23 +87,42 @@ const delay = ms => new Promise(res => setTimeout(res, ms));
 
     try {
       await fetch(`${SHEETS_URL}?${dadosSheet.toString()}`);
-      console.log(`📄 Sheets: ${evento1} – ${evento2}`);
+      console.log(`📄 Enviado ao Sheets: ${evento1} – ${evento2}`);
     } catch (e) {
-      console.error('❌ Erro Sheets:', e);
+      console.error('❌ Sheets erro:', e);
     }
 
+    // Enviar ao Supabase
     try {
-      await supabase.from('arbs').insert({
+      const { error } = await supabase.from('arbs').insert({
         id: `${evento1}-${evento2}`.substring(0, 60),
-        lucro, tempo, casa1, esporte1, casa2, esporte2,
-        data, hora, evento1, descEv1, evento2, descEv2,
-        mercado1, odd1, mercado2, odd2,
+        lucro,
+        tempo,
+        casa1,
+        esporte1,
+        casa2,
+        esporte2,
+        data,
+        hora,
+        evento1,
+        descEv1,
+        evento2,
+        descEv2,
+        mercado1,
+        odd1,
+        mercado2,
+        odd2,
         linkcasa1: link1,
         linkcasa2: link2
-      }, { returning: 'minimal' });
-      console.log(`📦 Supabase: ${evento1} – ${evento2}`);
+      });
+
+      if (error) {
+        console.error('❌ Supabase erro:', error.message);
+      } else {
+        console.log(`📦 Supabase: OK – ${evento1}`);
+      }
     } catch (e) {
-      console.error('❌ Erro Supabase:', e);
+      console.error('❌ Supabase falha:', e);
     }
   }
 
