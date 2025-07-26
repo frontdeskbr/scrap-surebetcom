@@ -78,7 +78,6 @@ const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
   for (const linha of oportunidades) {
     const [lucro, tempo, casa1, esporte1, casa2, esporte2, data, hora, evento1, descEv1, evento2, descEv2, mercado1, odd1, mercado2, odd2, link1, link2] = linha;
 
-    // Enviar ao Sheets
     const dadosSheet = new URLSearchParams({
       lucro, tempo, casa1, esporte1, casa2, esporte2,
       data, hora, evento1, descev1: descEv1, evento2, descev2: descEv2,
@@ -92,9 +91,8 @@ const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
       console.error('❌ Sheets erro:', e);
     }
 
-    // Enviar ao Supabase
     try {
-      const { error } = await supabase.from('arbs').insert({
+      await supabase.from('arbs').insert({
         id: `${evento1}-${evento2}`.substring(0, 60),
         lucro,
         tempo,
@@ -105,24 +103,19 @@ const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
         data,
         hora,
         evento1,
-        descEv1,
+        descev1: descEv1,
         evento2,
-        descEv2,
+        descev2: descEv2,
         mercado1,
         odd1,
         mercado2,
         odd2,
         linkcasa1: link1,
         linkcasa2: link2
-      });
-
-      if (error) {
-        console.error('❌ Supabase erro:', error.message);
-      } else {
-        console.log(`📦 Supabase: OK – ${evento1}`);
-      }
+      }, { returning: 'minimal' });
+      console.log(`📦 Enviado ao Supabase: ${evento1} – ${evento2}`);
     } catch (e) {
-      console.error('❌ Supabase falha:', e);
+      console.error('❌ Supabase erro:', e.message || e);
     }
   }
 
