@@ -1,9 +1,11 @@
 import { chromium } from 'playwright';
 import fetch from 'node-fetch';
 import { createClient } from '@supabase/supabase-js';
+import fs from 'fs/promises';
 
 const EMAIL = 'desenvolvimento.frontdesk@gmail.com';
 const SENHA = 'Guaruja@01';
+const COOKIES_PATH = './cookies.json';
 const URL_LOGIN = 'https://pt.surebet.com/users/sign_in';
 const URL_ARBS = 'https://pt.surebet.com/surebets';
 const SHEETS_URL = 'https://script.google.com/macros/s/AKfycbzaTeSftC1pLG7vN2SsnrZvEcjmzf6-8etd5fvDS_H9dFC5kdVS66kj1f6O41BEdkZxGg/exec';
@@ -18,22 +20,37 @@ const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
 (async () => {
   console.log('▶️ Iniciando navegador...');
   const browser = await chromium.launch({ headless: true });
-  const page = await browser.newPage();
+  const context = await browser.newContext();
 
-  console.log('🔐 Acessando login...');
-  await page.goto(URL_LOGIN);
-  await page.fill('input[name="user[email]"]', EMAIL);
-  await page.fill('input[name="user[password]"]', SENHA);
-  await page.click('input[type="submit"]');
-  await page.waitForNavigation();
+  try {
+    const cookies = JSON.parse(await fs.readFile(COOKIES_PATH, 'utf8'));
+    await context.addCookies(cookies);
+    console.log('🔄 Cookies carregados.');
+  } catch {
+    console.log('⚠️ Nenhum cookie encontrado. Será feito login.');
+  }
 
-  console.log('🌐 Indo para página de arbitragens...');
-  await page.goto(URL_ARBS);
+  const page = await context.newPage();
+  await page.goto(URL_ARBS, { waitUntil: 'domcontentloaded' });
+
+  if (page.url().includes('sign_in')) {
+    console.log('🔐 Login necessário...');
+    await page.goto(URL_LOGIN);
+    await page.fill('input[name="user[email]"]', EMAIL);
+    await page.fill('input[name="user[password]"]', SENHA);
+    await page.click('input[type="submit"]');
+    await page.waitForNavigation();
+    await fs.writeFile(COOKIES_PATH, JSON.stringify(await context.cookies(), null, 2));
+    console.log('✅ Login feito e cookies salvos.');
+  }
+
+  console.log('🌐 Indo para arbitragens...');
+  await page.goto(URL_ARBS, { waitUntil: 'domcontentloaded' });
   await delay(3000);
 
   const oportunidades = await page.evaluate(() => {
     const dados = [];
-    document.querySelectorAll('.surebet_record').forEach((el) => {
+    document.querySelectorAll('.surebet_record').forEach(el => {
       try {
         const lucro = el.querySelector('.profit')?.innerText.trim() || '';
         const tempo = el.querySelector('.age')?.innerText.trim() || '';
@@ -86,7 +103,7 @@ const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
 
     try {
       await fetch(`${SHEETS_URL}?${dadosSheet.toString()}`);
-      console.log(`📄 Enviado ao Sheets: ${evento1} – ${evento2}`);
+      console.log(`📄 Sheets: ${evento1} – ${evento2}`);
     } catch (e) {
       console.error('❌ Sheets erro:', e);
     }
@@ -94,28 +111,11 @@ const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
     try {
       await supabase.from('arbs').insert({
         id: `${evento1}-${evento2}`.substring(0, 60),
-        lucro,
-        tempo,
-        casa1,
-        esporte1,
-        casa2,
-        esporte2,
-        data,
-        hora,
-        evento1,
-        descEv1,
-        evento2,
-        descEv2,
-        mercado1,
-        odd1,
-        mercado2,
-        odd2,
-        linkcasa1: link1,
-        linkcasa2: link2
-      }, {
-        returning: 'minimal'
-      });
-      console.log(`📦 Enviado ao Supabase: ${evento1} – ${evento2}`);
+        lucro, tempo, casa1, esporte1, casa2, esporte2,
+        data, hora, evento1, descEv1, evento2, descEv2,
+        mercado1, odd1, mercado2, odd2, linkcasa1: link1, linkcasa2: link2
+      }, { returning: 'minimal' });
+      console.log(`📦 Supabase: ${evento1} – ${evento2}`);
     } catch (e) {
       console.error('❌ Supabase erro:', e);
     }
