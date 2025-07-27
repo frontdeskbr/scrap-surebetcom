@@ -1,93 +1,91 @@
 import { chromium } from 'playwright';
+import fs from 'fs/promises';
 import fetch from 'node-fetch';
 import { createClient } from '@supabase/supabase-js';
-import fs from 'fs/promises';
 
 const SHEETS_URL = 'https://script.google.com/macros/s/AKfycbzaTeSftC1pLG7vN2SsnrZvEcjmzf6-8etd5fvDS_H9dFC5kdVS66kj1f6O41BEdkZxGg/exec';
 const supabase = createClient(
   'https://ssrdcsrmifoexueivfls.supabase.co',
-  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...'
+  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNzcmRjc3JtaWZvZXh1ZWl2ZmxzIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc1MjgxNjM1OCwiZXhwIjoyMDY4MzkyMzU4fQ.8lK6UKsNPh3Ikll53YBbdpmGv0aWQQKuMYk9zsIiK54'
 );
 
-const delay = (ms) => new Promise((res) => setTimeout(res, ms));
+const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
 
 (async () => {
   console.log('▶️ Iniciando navegador...');
   const browser = await chromium.launch({ headless: true });
   const context = await browser.newContext();
 
-  // Login com cookies
-  const cookies = JSON.parse(await fs.readFile('./cookies.json', 'utf-8'));
+  // Aplica os cookies salvos
+  const cookies = JSON.parse(await fs.readFile('./cookies.json', 'utf8'));
   await context.addCookies(cookies);
 
   const page = await context.newPage();
-  console.log('🌐 Indo para página de arbitragens...');
-  await page.goto('https://pt.surebet.com/surebets');
 
-  // Desmarca 3 seleções, se marcada
-  const checkbox3 = await page.$('#selector_outcomes_3');
-  if (checkbox3 && await checkbox3.isChecked()) {
-    await checkbox3.click();
-    console.log('☑️ Desmarcando seleções de 3 resultados...');
+  console.log('🌐 Acessando página de arbitragens...');
+  await page.goto('https://pt.surebet.com/surebets', { waitUntil: 'domcontentloaded' });
+
+  // Desmarca o 3 seleções se estiver marcado e aplica o filtro
+  try {
+    const selector3 = 'label[for="group-size-3"] input';
+    if (await page.$eval(selector3, el => el.checked)) {
+      await page.click('label[for="group-size-3"]');
+      await delay(800);
+      await page.click('button[type="submit"]'); // botão Filtrar
+      await delay(3000);
+      console.log('☑️ Apenas 2 seleções ativado');
+    }
+  } catch (e) {
+    console.warn('⚠️ Filtro não aplicado:', e.message);
   }
-
-  // Clica no botão "Filtrar"
-  const btn = await page.$('input#ft.btn.btn-primary.mb-2');
-  if (btn) await btn.click();
-
-  await delay(8000); // espera carregar
 
   const oportunidades = await page.evaluate(() => {
     const linhas = [];
-    document.querySelectorAll('tbody.surebet_record').forEach((el) => {
+    document.querySelectorAll('.surebet_record').forEach((el) => {
       try {
-        const groupSize = parseInt(el.getAttribute('data-group-size') || '0');
-        if (groupSize !== 2) return;
-
         const lucro = el.querySelector('.profit')?.innerText.trim() || '';
         const tempo = el.querySelector('.age')?.innerText.trim() || '';
 
-        const casas = el.querySelectorAll('td.booker');
-        const casa1 = casas[0]?.innerText.split('\n')[0]?.trim() || '';
-        const esporte1 = casas[0]?.querySelector('span.minor')?.innerText.trim() || 'Futebol';
-        const casa2 = casas[1]?.innerText.split('\n')[0]?.trim() || '';
-        const esporte2 = casas[1]?.querySelector('span.minor')?.innerText.trim() || 'Futebol';
+        const casas = el.querySelectorAll('.booker');
+        const casa1 = casas[0]?.innerText.trim() || '';
+        const casa2 = casas[1]?.innerText.trim() || '';
 
-        const abbrs = el.querySelectorAll('td.time abbr');
-        const data = abbrs[0]?.innerHTML.split('<br>')[0]?.trim() || '';
-        const hora = abbrs[0]?.innerHTML.split('<br>')[1]?.trim() || '';
+        const dataHora = el.querySelector('.time abbr')?.innerText.split('\n') || [];
+        const data = dataHora[0]?.trim() || '';
+        const hora = dataHora[1]?.trim() || '';
 
-        const eventos = el.querySelectorAll('td.event a');
+        const eventos = el.querySelectorAll('.event a');
         const evento1 = eventos[0]?.innerText.trim() || '';
         const evento2 = eventos[1]?.innerText.trim() || '';
 
-        const descEv1 = eventos[0]?.parentElement?.querySelector('span.minor')?.innerText.trim() || '';
-        const descEv2 = eventos[1]?.parentElement?.querySelector('span.minor')?.innerText.trim() || '';
+        const descricoes = el.querySelectorAll('.event .minor');
+        const descEv1 = descricoes[0]?.innerText.trim() || '';
+        const descEv2 = descricoes[1]?.innerText.trim() || '';
 
-        const mercados = el.querySelectorAll('td.coeff abbr');
+        const mercados = el.querySelectorAll('.coeff abbr');
         const mercado1 = mercados[0]?.innerText.trim() || '';
         const mercado2 = mercados[1]?.innerText.trim() || '';
 
-        const odds = el.querySelectorAll('td.value a.value_link');
+        const odds = el.querySelectorAll('.value_link');
         const odd1 = odds[0]?.innerText.trim() || '';
         const odd2 = odds[1]?.innerText.trim() || '';
 
-        const linkcasa1 = 'https://pt.surebet.com' + (odds[0]?.getAttribute('href') || '');
-        const linkcasa2 = 'https://pt.surebet.com' + (odds[1]?.getAttribute('href') || '');
+        const linkCasa1 = 'https://pt.surebet.com' + (odds[0]?.getAttribute('href') || '');
+        const linkCasa2 = 'https://pt.surebet.com' + (odds[1]?.getAttribute('href') || '');
 
         linhas.push([
-          lucro, tempo, casa1, esporte1, casa2, esporte2,
+          lucro, tempo, casa1, 'Futebol', casa2, 'Futebol',
           data, hora, evento1, descEv1, evento2, descEv2,
-          mercado1, odd1, mercado2, odd2, linkcasa1, linkcasa2
+          mercado1, odd1, mercado2, odd2, linkCasa1, linkCasa2
         ]);
-      } catch (e) {
-        console.warn('❌ Erro bloco:', e);
+      } catch (err) {
+        console.warn('❌ Erro bloco:', err);
       }
     });
     return linhas;
   });
 
-  console.log(`✅ Extraído: ${oportunidades.length} linhas`);
+  console.log(`✅ ${oportunidades.length} oportunidades extraídas`);
 
   for (const linha of oportunidades) {
     const [
@@ -96,24 +94,31 @@ const delay = (ms) => new Promise((res) => setTimeout(res, ms));
       mercado1, odd1, mercado2, odd2, link1, link2
     ] = linha;
 
-    // Google Sheets
-    const params = new URLSearchParams({
+    const dadosSheet = new URLSearchParams({
       lucro, tempo, casa1, esporte1, casa2, esporte2,
       data, hora, evento1, descev1: descEv1, evento2, descev2: descEv2,
       mercado1, odd1, mercado2, odd2, linkcasa1: link1, linkcasa2: link2
     });
-    await fetch(`${SHEETS_URL}?${params.toString()}`);
-    console.log(`📄 Enviado ao Sheets: ${evento1} – ${evento2}`);
 
-    // Supabase
-    await supabase.from('arbs').insert({
-      id: `${evento1}-${evento2}`.substring(0, 60),
-      lucro, tempo, casa1, esporte1, casa2, esporte2,
-      data, hora, evento1, descEv1, evento2, descEv2,
-      mercado1, odd1, mercado2, odd2,
-      linkcasa1: link1, linkcasa2: link2
-    }, { returning: 'minimal' });
-    console.log(`📦 Enviado ao Supabase: ${evento1} – ${evento2}`);
+    try {
+      await fetch(`${SHEETS_URL}?${dadosSheet.toString()}`);
+      console.log(`📄 Enviado ao Sheets: ${evento1} – ${evento2}`);
+    } catch (e) {
+      console.error('❌ Sheets erro:', e.message);
+    }
+
+    try {
+      await supabase.from('arbs').insert({
+        id: `${evento1}-${evento2}`.substring(0, 60),
+        lucro, tempo, casa1, esporte1, casa2, esporte2,
+        data, hora, evento1, descEv1, evento2, descEv2,
+        mercado1, odd1, mercado2, odd2,
+        linkcasa1: link1, linkcasa2: link2
+      }, { returning: 'minimal' });
+      console.log(`📦 Enviado ao Supabase: ${evento1} – ${evento2}`);
+    } catch (e) {
+      console.error('❌ Supabase erro:', e.message);
+    }
   }
 
   await browser.close();
