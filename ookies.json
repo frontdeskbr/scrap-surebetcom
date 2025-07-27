@@ -1,0 +1,10 @@
+[
+  {
+    "name": "stoken",
+    "value": "29226235-3de3649ca78f76d0af26d9bfc84089299893505a",
+    "domain": "pt.surebet.com",
+    "path": "/",
+    "httpOnly": true,
+    "secure": true
+  }
+]
